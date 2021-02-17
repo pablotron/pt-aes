@@ -25,6 +25,7 @@ int main(int argc, char *argv[]) {
 
   print_u8s("mix test", TEST);
   print_u8s("mix result", dst);
+  printf("zing!!! (as requested by nadine)\n");
 
   return 0;
 }

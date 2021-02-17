@@ -8,12 +8,12 @@ puts (256 * 3).times.map { |i|
   when 0
     v
   when 1
-    (v << 1) ^ ((v & 0x80) ? 0x1b : 0)
+    (v << 1) ^ ((v & 0x80) ? 0x0000001b : 0x00000000)
   when 2
-    (v << 1) ^ ((v & 0x80) ? 0x1b : 0) ^ v
+    (v << 1) ^ ((v & 0x80) ? 0x0000001b : 0x00000000) ^ v
   end
 }.map { |v|
   '0x%02x' % [v & 0xff]
 }.each_slice(8).map { |row|
-  row.join(', ')
+  '  ' << row.join(', ')
 }.join(",\n")
