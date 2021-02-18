@@ -8,6 +8,7 @@
 } while (0)
 
 // copy transposed 4x4 matrix to +dst+ from +src+
+// (unused, delete)
 #define TRANSPOSE(dst, src) do { \
   (dst)[ 0] = (src)[ 0]; \
   (dst)[ 1] = (src)[ 4]; \
@@ -79,10 +80,10 @@ static void pt_aes_sub_bytes_and_shift(
   const uint8_t src[static restrict 16]
 ) {
   uint8_t tmp[16] = {
-    SBOX[src[ 0]], SBOX[src[ 1]], SBOX[src[ 2]], SBOX[src[ 3]],
-    SBOX[src[ 5]], SBOX[src[ 6]], SBOX[src[ 7]], SBOX[src[ 4]],
-    SBOX[src[10]], SBOX[src[11]], SBOX[src[ 8]], SBOX[src[ 9]],
-    SBOX[src[15]], SBOX[src[12]], SBOX[src[13]], SBOX[src[14]],
+    SBOX[src[ 0]], SBOX[src[ 5]], SBOX[src[10]], SBOX[src[15]],
+    SBOX[src[ 4]], SBOX[src[ 9]], SBOX[src[14]], SBOX[src[ 3]],
+    SBOX[src[ 8]], SBOX[src[13]], SBOX[src[ 2]], SBOX[src[ 7]],
+    SBOX[src[12]], SBOX[src[ 1]], SBOX[src[ 6]], SBOX[src[11]],
   };
 
   COPY(dst, tmp, 16);
@@ -165,15 +166,7 @@ static void pt_aes_mix(
   uint8_t tmp[16];
 
   for (int i = 0; i < 4; i++) {
-    const uint8_t tmp_src[4] = { src[i], src[i + 4], src[i + 8], src[i + 12] };
-    uint8_t tmp_dst[4];
-
-    pt_aes_mix_col(tmp_dst, tmp_src);
-
-    tmp[i +  0] = tmp_dst[0];
-    tmp[i +  4] = tmp_dst[1];
-    tmp[i +  8] = tmp_dst[2];
-    tmp[i + 12] = tmp_dst[3];
+    pt_aes_mix_col(tmp + (4 * i), src + (4 * i));
   }
 
   COPY(dst, tmp, 16);
@@ -249,9 +242,28 @@ static void pt_aes128_add_round_key(
   uint8_t tmp[16];
   COPY(tmp, src, 16);
 
+/* 
+ *   tmp[ 0] ^= (key_data[0] >> 24) & 0xff;
+ *   tmp[ 1] ^= (key_data[0] >> 16) & 0xff;
+ *   tmp[ 2] ^= (key_data[0] >>  8) & 0xff;
+ *   tmp[ 3] ^= (key_data[0] >>  0) & 0xff;
+ *   tmp[ 4] ^= (key_data[1] >> 24) & 0xff;
+ *   tmp[ 5] ^= (key_data[1] >> 16) & 0xff;
+ *   tmp[ 6] ^= (key_data[1] >>  8) & 0xff;
+ *   tmp[ 7] ^= (key_data[1] >>  0) & 0xff;
+ *   tmp[ 8] ^= (key_data[2] >> 24) & 0xff;
+ *   tmp[ 9] ^= (key_data[2] >> 16) & 0xff;
+ *   tmp[10] ^= (key_data[2] >>  8) & 0xff;
+ *   tmp[11] ^= (key_data[2] >>  0) & 0xff;
+ *   tmp[12] ^= (key_data[3] >> 24) & 0xff;
+ *   tmp[13] ^= (key_data[3] >> 16) & 0xff;
+ *   tmp[14] ^= (key_data[3] >>  8) & 0xff;
+ *   tmp[15] ^= (key_data[3] >>  0) & 0xff;
+ */ 
+
   // mix in key data
   for (int i = 0; i < 16; i++) {
-    tmp[i] ^= (key_data[i & 0x03] >> (24 - ((i & 0xfc) << 1))) & 0xff;
+    tmp[i] ^= (key_data[i >> 2] >> (24 - ((i & 0x3) << 3))) & 0xff;
   }
 
   // copy to output buffer
@@ -274,8 +286,8 @@ void pt_aes128_enc(
 ) {
   uint8_t a[16], b[16];
 
-  TRANSPOSE(b, src);
-  pt_aes128_add_round_key(a, b, key_data);
+  // add initial round key
+  pt_aes128_add_round_key(a, src, key_data);
 
   // first 9 rounds
   for (int i = 0; i < 9; i++) {
@@ -287,8 +299,5 @@ void pt_aes128_enc(
 
   // final round
   pt_aes_sub_bytes_and_shift(b, a);
-  pt_aes128_add_round_key(a, b, key_data + 40);
-
-  // copy to output
-  TRANSPOSE(dst, a);
+  pt_aes128_add_round_key(dst, b, key_data + 40);
 }
