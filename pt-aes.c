@@ -1,9 +1,29 @@
 #include <stdint.h>
 
+// copy
 #define COPY(dst, src, num) do { \
   for (unsigned int _i = 0; _i < (num); _i++) { \
     (dst)[_i] = (src)[_i]; \
   } \
+} while (0)
+
+#define TRANSPOSE(dst, src) do { \
+  (dst)[ 0] = (src)[ 0]; \
+  (dst)[ 1] = (src)[ 4]; \
+  (dst)[ 2] = (src)[ 8]; \
+  (dst)[ 3] = (src)[12]; \
+  (dst)[ 4] = (src)[ 1]; \
+  (dst)[ 5] = (src)[ 5]; \
+  (dst)[ 6] = (src)[ 9]; \
+  (dst)[ 7] = (src)[13]; \
+  (dst)[ 8] = (src)[ 2]; \
+  (dst)[ 9] = (src)[ 6]; \
+  (dst)[10] = (src)[10]; \
+  (dst)[11] = (src)[14]; \
+  (dst)[12] = (src)[ 3]; \
+  (dst)[13] = (src)[ 7]; \
+  (dst)[14] = (src)[11]; \
+  (dst)[15] = (src)[15]; \
 } while (0)
 
 static const uint8_t SBOX[256] = {
@@ -64,28 +84,32 @@ static void aes_sub_bytes_and_shift(
  *   [ b_3 ]   [ 3 1 1 2 ] [ a_3 ]
  *
  * Where:
- *   - Addition is done with XOR
+ * - Addition is done with XOR, like so:
  *
- *   - Multiplication by 2 is XORed against 0x1b on overflow, e.g:
+ *   = a + b
+ *   = a ^ b
  *
- *       = 2 * x
- *       = (x << 1) ^ ((x & 0x80) ? 0x1b : 0x00)
+ * - Multiplication by 2 is a shift, XORed against 0x1b on overflow,
+ *   like so:
  *
- *   - Multiplication by 3 is done as a multiply by two and an addition,
- *     e.g.:
+ *     = 2 * x
+ *     = (x << 1) ^ ((x & 0x80) ? 0x1b : 0x00)
  *
- *       = 3 * x
- *       = (2 + 1) * x
- *       = (2 * x) + (1 * x)
- *       = (2 * x) + x
- *       = (x << 1) ^ ((x & 0x80) ? 0x1b : 0x00) ^ x
+ * - Multiplication by 3 is done as a multiply by two and an addition,
+ *   like so:
+ *
+ *     = 3 * x
+ *     = (2 + 1) * x                                // equivalent
+ *     = (2 * x) + (1 * x)                          // distribute
+ *     = (2 * x) + x                                // identity
+ *     = (x << 1) ^ ((x & 0x80) ? 0x1b : 0x00) ^ x  // convert
  *
  * Sources:
- *   https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf
- *   https://en.wikipedia.org/wiki/Rijndael_MixColumns
+ * - https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf
+ * - https://en.wikipedia.org/wiki/Rijndael_MixColumns
  *
  */
-static void aes_mix_col(
+void aes_mix_col(
   uint8_t dst[static restrict 4],
   const uint8_t src[static restrict 4]
 ) {
@@ -115,6 +139,7 @@ static void aes_mix_col(
     (src[3] << 1) ^ ((src[3] & 0x80) ? 0x1b : 0x00),
   };
 
+  // copy to output
   COPY(dst, tmp, sizeof(tmp));
 }
 
@@ -139,25 +164,105 @@ static void aes_mix(
   COPY(dst, tmp, 16);
 }
 
-void aes_mix_test(
-  uint8_t dst[static restrict 16],
-  const uint8_t src[static restrict 16]
-) {
-  aes_mix(dst, src);
+// rotate right, 32-bit
+#define ROTL32(a, s) (((a) << (s)) | ((a) >> (32 - (s))))
+
+// round constants
+static const uint32_t RCONS[11] = {
+  0x01000000, 0x02000000, 0x04000000, 0x08000000,
+  0x10000000, 0x20000000, 0x40000000, 0x80000000,
+  0x1b000000, 0x36000000, 0x6c000000,
+};
+
+static uint32_t rot_sub_u32(const uint32_t a, const uint32_t i) {
+  const uint32_t b = ROTL32(a, 8);
+  return RCONS[(i - 1) >> 2] ^ (
+    (SBOX[(b >>  0) & 0xff]) |
+    (SBOX[(b >>  8) & 0xff] <<  8) |
+    (SBOX[(b >> 16) & 0xff] << 16) |
+    (SBOX[(b >> 24) & 0xff] << 24)
+  );
 }
 
-void aes128_round(
-  uint8_t dst[static restrict 16],
+/**
+ * Expand 16 byte key into an array of 44 unsigned, 32-bit round keys.
+ */
+void aes128_keyex(
+  uint32_t dst[static restrict 44],
   const uint8_t src[static restrict 16]
 ) {
-  uint8_t a[16], b[16];
-  COPY(a, src, 16);
+  uint32_t tmp[44] = {
+    src[ 3] | (src[ 2] << 8) | (src[ 1] << 16) | (src[ 0] << 24),
+    src[ 7] | (src[ 6] << 8) | (src[ 5] << 16) | (src[ 4] << 24),
+    src[11] | (src[10] << 8) | (src[ 9] << 16) | (src[ 8] << 24),
+    src[15] | (src[14] << 8) | (src[13] << 16) | (src[12] << 24),
+  };
 
-  for (int i = 0; i < 10; i++) {
-    aes_sub_bytes_and_shift(b, a);
-    aes_mix(a, b);
-    COPY(b, a, 16);
+  for (int i = 4; i < 44; i++) {
+    uint32_t a = tmp[i - 1],
+             b = rot_sub_u32(tmp[i - 1], i);
+    // tmp[i] = ((i & 0x3) ? a : b);
+    tmp[i] = tmp[i - 4] ^ ((i & 0x3) ? a : b);
   }
 
-  COPY(dst, b, 16);
+  COPY(dst, tmp, 44);
+}
+
+static void aes128_add_round_key(
+  uint8_t dst[static restrict 16],
+  const uint8_t src[static restrict 16],
+  const uint32_t key_data[static restrict 4]
+) {
+  uint8_t tmp[16];
+  COPY(tmp, src, 16);
+
+  for (int i = 0; i < 16; i++) {
+    tmp[i] ^= (key_data[i & 0x03] >> (24 - ((i & 0xfc) << 1))) & 0xff;
+  }
+/* 
+ *   tmp[ 0] ^= (key_data[0] >> 24) & 0xff;
+ *   tmp[ 1] ^= (key_data[1] >> 24) & 0xff;
+ *   tmp[ 2] ^= (key_data[2] >> 24) & 0xff;
+ *   tmp[ 3] ^= (key_data[3] >> 24) & 0xff;
+ *   tmp[ 4] ^= (key_data[0] >> 16) & 0xff;
+ *   tmp[ 5] ^= (key_data[1] >> 16) & 0xff;
+ *   tmp[ 6] ^= (key_data[2] >> 16) & 0xff;
+ *   tmp[ 7] ^= (key_data[3] >> 16) & 0xff;
+ *   tmp[ 8] ^= (key_data[0] >>  8) & 0xff;
+ *   tmp[ 9] ^= (key_data[1] >>  8) & 0xff;
+ *   tmp[10] ^= (key_data[2] >>  8) & 0xff;
+ *   tmp[11] ^= (key_data[3] >>  8) & 0xff;
+ *   tmp[12] ^= (key_data[0] >>  0) & 0xff;
+ *   tmp[13] ^= (key_data[1] >>  0) & 0xff;
+ *   tmp[14] ^= (key_data[2] >>  0) & 0xff;
+ *   tmp[15] ^= (key_data[3] >>  0) & 0xff;
+ */ 
+
+  COPY(dst, tmp, 16);
+}
+
+void aes128_enc(
+  uint8_t dst[static restrict 16],
+  const uint8_t src[static restrict 16],
+  const uint32_t key_data[static restrict 44]
+) {
+  uint8_t a[16], b[16];
+
+  TRANSPOSE(b, src);
+  aes128_add_round_key(a, b, key_data);
+
+  // first 9 rounds
+  for (int i = 0; i < 9; i++) {
+    aes_sub_bytes_and_shift(b, a);
+    aes_mix(a, b);
+    aes128_add_round_key(b, a, key_data + 4 * (i + 1));
+    COPY(a, b, 16);
+  }
+
+  // final round
+  aes_sub_bytes_and_shift(b, a);
+  aes128_add_round_key(a, b, key_data + 40);
+
+  // copy to output
+  TRANSPOSE(dst, a);
 }
