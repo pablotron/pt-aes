@@ -6,7 +6,7 @@
 
 #define LEN(a) (sizeof(a) / sizeof(a[0]))
 
-// test vectors for aes_mix_col()
+// test vectors for pt_aes_mix_col()
 // src: https://en.wikipedia.org/wiki/Rijndael_MixColumns#Test_vectors_for_MixColumn()
 static const struct {
   uint8_t src[4];
@@ -38,7 +38,7 @@ static void fail_aes_mix_col_test(
   const uint8_t *src = AES_MIX_COL_TESTS[num].src;
   const uint8_t *exp = AES_MIX_COL_TESTS[num].dst;
 
-  printf("FAIL: aes_mix_col test %zu:\n", num);
+  printf("FAIL: AES_MIX_COL_TESTS[%zu]:\n", num);
   printf("  src = %02x %02x %02x %02x\n", src[0], src[1], src[2], src[3]);
   printf("  exp = %02x %02x %02x %02x\n", exp[0], exp[1], exp[2], exp[3]);
   printf("  got = %02x %02x %02x %02x\n", got[0], got[1], got[2], got[3]);
@@ -48,7 +48,7 @@ static void test_aes_mix_col(void) {
   for (size_t i = 0; i < LEN(AES_MIX_COL_TESTS); i++) {
     // mix column
     uint8_t got[4];
-    aes_mix_col(got, AES_MIX_COL_TESTS[i].src);
+    pt_aes_mix_col(got, AES_MIX_COL_TESTS[i].src);
 
     // check result
     if (memcmp(got, AES_MIX_COL_TESTS[i].dst, 4)) {
@@ -121,7 +121,7 @@ static void test_aes128_keyex(void) {
   for (size_t i = 0; i < LEN(AES128_KEYEX_TESTS); i++) {
     // expand key
     uint32_t got[44];
-    aes128_keyex(got, AES128_KEYEX_TESTS[i].src);
+    pt_aes128_keyex(got, AES128_KEYEX_TESTS[i].src);
 
     // check result
     if (memcmp(got, AES128_KEYEX_TESTS[i].dst, 44 * sizeof(uint32_t))) {
@@ -194,11 +194,11 @@ static void test_aes128_enc(void) {
   for (size_t i = 0; i < LEN(AES128_ENC_TESTS); i++) {
     // expand key
     uint32_t key_data[44];
-    aes128_keyex(key_data, AES128_ENC_TESTS[i].key);
+    pt_aes128_keyex(key_data, AES128_ENC_TESTS[i].key);
 
     // encrypt block
     uint8_t got[16];
-    aes128_enc(got, AES128_ENC_TESTS[i].src, key_data);
+    pt_aes128_enc(got, AES128_ENC_TESTS[i].src, key_data);
 
     // check result
     if (memcmp(got, AES128_ENC_TESTS[i].dst, 16)) {

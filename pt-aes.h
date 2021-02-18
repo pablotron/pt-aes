@@ -1,17 +1,17 @@
 #ifndef PT_AES_H
 #define PT_AES_H
 
-void aes128_keyex(
+void pt_aes128_keyex(
   uint32_t dst[static restrict 44],
   const uint8_t src[static restrict 16]
 );
 
-void aes_mix_col(
+void pt_aes_mix_col(
   uint8_t dst[static restrict 4],
   const uint8_t src[static restrict 4]
 );
 
-void aes128_enc(
+void pt_aes128_enc(
   uint8_t dst[static restrict 16],
   const uint8_t src[static restrict 16],
   const uint32_t key_data[static restrict 44]
