@@ -179,18 +179,23 @@ static void pt_aes_mix(
   COPY(dst, tmp, 16);
 }
 
-// rotate right, 32-bit
-#define ROTL32(a, s) (((a) << (s)) | ((a) >> (32 - (s))))
-
 // round constants (used in rot_sub_u32())
+//
+// FIXME: we might want to  calculate this on the fly to avoid cache
+// timing attacks.
 static const uint32_t RCONS[11] = {
   0x01000000, 0x02000000, 0x04000000, 0x08000000,
   0x10000000, 0x20000000, 0x40000000, 0x80000000,
   0x1b000000, 0x36000000, 0x6c000000,
 };
 
+// rotate left, 32-bit
+#define ROTL32(a, s) (((a) << (s)) | ((a) >> (32 - (s))))
+
 static uint32_t rot_sub_u32(const uint32_t a, const uint32_t i) {
+  // rotate left by 8 bits
   const uint32_t b = ROTL32(a, 8);
+
   return RCONS[(i - 1) >> 2] ^ (
     (SBOX[(b >>  0) & 0xff]) |
     (SBOX[(b >>  8) & 0xff] <<  8) |
@@ -225,7 +230,6 @@ void pt_aes128_keyex(
   for (int i = 4; i < 44; i++) {
     uint32_t a = tmp[i - 1],
              b = rot_sub_u32(tmp[i - 1], i);
-    // tmp[i] = ((i & 0x3) ? a : b);
     tmp[i] = tmp[i - 4] ^ ((i & 0x3) ? a : b);
   }
 
