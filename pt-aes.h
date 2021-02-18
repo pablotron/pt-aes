@@ -17,4 +17,10 @@ void pt_aes128_enc(
   const uint32_t key_data[static restrict 44]
 );
 
+void pt_aes128_dec(
+  uint8_t dst[static restrict 16],
+  const uint8_t src[static restrict 16],
+  const uint32_t key_data[static restrict 44]
+);
+
 #endif /* PT_AES_H */
