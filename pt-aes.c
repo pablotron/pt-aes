@@ -7,27 +7,6 @@
   } \
 } while (0)
 
-// copy transposed 4x4 matrix to +dst+ from +src+
-// (unused, delete)
-#define TRANSPOSE(dst, src) do { \
-  (dst)[ 0] = (src)[ 0]; \
-  (dst)[ 1] = (src)[ 4]; \
-  (dst)[ 2] = (src)[ 8]; \
-  (dst)[ 3] = (src)[12]; \
-  (dst)[ 4] = (src)[ 1]; \
-  (dst)[ 5] = (src)[ 5]; \
-  (dst)[ 6] = (src)[ 9]; \
-  (dst)[ 7] = (src)[13]; \
-  (dst)[ 8] = (src)[ 2]; \
-  (dst)[ 9] = (src)[ 6]; \
-  (dst)[10] = (src)[10]; \
-  (dst)[11] = (src)[14]; \
-  (dst)[12] = (src)[ 3]; \
-  (dst)[13] = (src)[ 7]; \
-  (dst)[14] = (src)[11]; \
-  (dst)[15] = (src)[15]; \
-} while (0)
-
 /**
  * Multiply by two in GF8.
  */
@@ -94,7 +73,7 @@ static const uint8_t E_SBOX[256] = {
  * - https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf
  *
  */
-static void pt_aes_enc_sub_and_shift(
+static inline void pt_aes_enc_sub_and_shift(
   uint8_t dst[static restrict 16],
   const uint8_t src[static restrict 16]
 ) {
@@ -339,11 +318,10 @@ static const uint8_t D_SBOX[256] = {
   0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d,
 };
 
-static void pt_aes_dec_shift_and_sub(
+static inline void pt_aes_dec_shift_and_sub(
   uint8_t dst[static restrict 16],
   const uint8_t src[static restrict 16]
 ) {
-  (void) D_SBOX;
   uint8_t tmp[16] = {
     D_SBOX[src[ 0]], D_SBOX[src[13]], D_SBOX[src[10]], D_SBOX[src[ 7]],
     D_SBOX[src[ 4]], D_SBOX[src[ 1]], D_SBOX[src[14]], D_SBOX[src[11]],
@@ -375,10 +353,6 @@ static void pt_aes_inv_mix_col(
                 c = src[2],
                 d = src[3];
 
-  // e b d 9
-  // 9 e b d
-  // d 9 e b
-  // b d 9 e
   const uint8_t tmp[4] = {
     // InvMixColumn r0: e b d 9
     gmul(a, 0xe) ^ gmul(b, 0xb) ^ gmul(c, 0xd) ^ gmul(d, 0x9),
