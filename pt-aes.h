@@ -18,4 +18,27 @@ void pt_aes128_dec(
   const uint32_t key_data[static restrict 44]
 );
 
+typedef struct {
+  uint32_t key_data[44];
+  uint8_t last[16];
+} pt_aes128_cbc_t;
+
+void pt_aes128_cbc_init(
+  pt_aes128_cbc_t * const state,
+  const uint8_t key[static restrict 16],
+  const uint8_t iv[static restrict 16]
+);
+
+void pt_aes128_cbc_enc(
+  pt_aes128_cbc_t *state,
+  uint8_t dst[static restrict 16],
+  const uint8_t src[static restrict 16]
+);
+
+void pt_aes128_cbc_dec(
+  pt_aes128_cbc_t *state,
+  uint8_t dst[static restrict 16],
+  const uint8_t src[static restrict 16]
+);
+
 #endif /* PT_AES_H */

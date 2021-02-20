@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include "pt-aes.h"
 
 // copy +num+ elements to +dst+ from +src+
 #define COPY(dst, src, num) do { \
@@ -414,4 +415,60 @@ void pt_aes128_dec(
   // final round, copy to output
   pt_aes_dec_shift_and_sub(b, a);
   pt_aes128_add_round_key(dst, b, key_data);
+}
+void pt_aes128_cbc_init(
+  pt_aes128_cbc_t * const state,
+  const uint8_t key[static restrict 16],
+  const uint8_t iv[static restrict 16]
+) {
+  pt_aes128_keyex(state->key_data, key);
+  COPY(state->last, iv, 16);
+}
+
+
+/**
+ * Encrypt using aes128-cbc
+ *
+ * F(plaintext_i) = plaintext_i ^ ciphertext_(i - 1)
+ * ciphertext_0 = IV
+ *
+ * ref: https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Confidentiality_only_modes
+ */
+void pt_aes128_cbc_enc(
+  pt_aes128_cbc_t * const state,
+  uint8_t dst[static restrict 16],
+  const uint8_t src[static restrict 16]
+) {
+  uint8_t tmp[16];
+
+  // xor against last ciphertext block
+  for (int i = 0; i < 16; i++) {
+    tmp[i] = state->last[i] ^ src[i];
+  }
+
+  // encrypt block
+  pt_aes128_enc(state->last, tmp, state->key_data);
+
+  // copy to output
+  COPY(dst, state->last, 16);
+}
+
+void pt_aes128_cbc_dec(
+  pt_aes128_cbc_t * const state,
+  uint8_t dst[static restrict 16],
+  const uint8_t src[static restrict 16]
+) {
+  uint8_t tmp[16];
+
+  // decrypt block
+  pt_aes128_dec(tmp, src, state->key_data);
+
+  // xor against last ciphertext block
+  for (int i = 0; i < 16; i++) {
+    tmp[i] ^= state->last[i];
+  }
+
+  // copy to state and output
+  COPY(state->last, tmp, 16);
+  COPY(dst, tmp, 16);
 }
