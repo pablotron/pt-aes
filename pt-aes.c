@@ -8,24 +8,8 @@
   } \
 } while (0)
 
-/**
- * Multiply by two in GF8.
- */
-static uint8_t xtime(const uint8_t a) {
-  return (a << 1) ^ (((a >> 7) & 1) * 0x1b);
-}
-
-/**
- * Multiply two 8-bit values in GF8.
- */
-static uint8_t gmul(const uint8_t a, const uint8_t b) {
-  return (
-    (((b     ) & 1) * a) ^
-    (((b >> 1) & 1) * xtime(a)) ^
-    (((b >> 2) & 1) * xtime(xtime(a))) ^
-    (((b >> 3) & 1) * xtime(xtime(xtime(a))))
-  );
-}
+// rotate left, 32-bit
+#define ROTL32(a, s) (((a) << (s)) | ((a) >> (32 - (s))))
 
 /**
  * Substitution box (S-Box) used for SubBytes transformation from
@@ -67,138 +51,6 @@ static const uint8_t E_SBOX[256] = {
 };
 
 /**
- * SubBytes and ShiftRows transformations from sections 5.1.1 and 5.1.2
- * of FIPS-197.
- *
- * Source:
- * - https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf
- *
- */
-static inline void pt_aes_enc_sub_and_shift(
-  uint8_t dst[static restrict 16],
-  const uint8_t src[static restrict 16]
-) {
-  uint8_t tmp[16] = {
-    E_SBOX[src[ 0]], E_SBOX[src[ 5]], E_SBOX[src[10]], E_SBOX[src[15]],
-    E_SBOX[src[ 4]], E_SBOX[src[ 9]], E_SBOX[src[14]], E_SBOX[src[ 3]],
-    E_SBOX[src[ 8]], E_SBOX[src[13]], E_SBOX[src[ 2]], E_SBOX[src[ 7]],
-    E_SBOX[src[12]], E_SBOX[src[ 1]], E_SBOX[src[ 6]], E_SBOX[src[11]],
-  };
-
-  COPY(dst, tmp, 16);
-}
-
-/**
- * Implement AES MixColumn transformation from FIPS-197.
- *
- * In other words, this transformation (represented in matrix form):
- *
- *   [ b_0 ]   [ 2 3 1 1 ] [ a_0 ]
- *   [ b_1 ] = [ 1 2 3 1 ] [ a_1 ]
- *   [ b_2 ]   [ 1 1 2 3 ] [ a_2 ]
- *   [ b_3 ]   [ 3 1 1 2 ] [ a_3 ]
- *
- * Where:
- * - Addition is done with XOR, like so:
- *
- *   = a + b
- *   = a ^ b
- *
- * - Multiplication by 2 is a shift, XORed against 0x1b on overflow,
- *   like so:
- *
- *     = 2 * x
- *     = (x << 1) ^ ((x & 0x80) ? 0x1b : 0x00)
- *
- * - Multiplication by 3 is done as a multiply by two and an addition,
- *   like so:
- *
- *     = 3 * x
- *     = (2 + 1) * x                                // equivalent
- *     = (2 * x) + (1 * x)                          // distribute
- *     = (2 * x) + x                                // identity
- *     = (x << 1) ^ ((x & 0x80) ? 0x1b : 0x00) ^ x  // convert
- *
- * Sources:
- * - https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf
- * - https://en.wikipedia.org/wiki/Rijndael_MixColumns
- *
- */
-static void pt_aes_mix_col(
-  uint8_t dst[static restrict 4],
-  const uint8_t src[static restrict 4]
-) {
-  const uint8_t a = src[0],
-                b = src[1],
-                c = src[2],
-                d = src[3];
-
-  const uint8_t tmp[4] = {
-    // MixColumn r0: 2 3 1 1
-    gmul(a, 2) ^ gmul(b, 3) ^ c ^ d,
-
-    // MixColumn r1: 1 2 3 1
-    a ^ gmul(b, 2) ^ gmul(c, 3) ^ d,
-
-    // MixColumn r2: 1 1 2 3
-    a ^ b ^ gmul(c, 2) ^ gmul(d, 3),
-
-    // MixColumn r3: 3 1 1 2
-    gmul(a, 3) ^ b ^ c ^ gmul(d, 2),
-  };
-
-  // copy to output
-  COPY(dst, tmp, sizeof(tmp));
-}
-
-#ifdef PT_AES_TEST
-void pt_aes_test_mix_col(
-  uint8_t dst[static restrict 4],
-  const uint8_t src[static restrict 4]
-) {
-  pt_aes_mix_col(dst, src);
-}
-#endif /* PT_AES_TEST */
-
-static void pt_aes_mix(
-  uint8_t dst[static restrict 16],
-  const uint8_t src[static restrict 16]
-) {
-  uint8_t tmp[16];
-
-  for (int i = 0; i < 4; i++) {
-    pt_aes_mix_col(tmp + (4 * i), src + (4 * i));
-  }
-
-  COPY(dst, tmp, 16);
-}
-
-// round constants (used in aes128_rot_sub_u32())
-//
-// FIXME: we might want to  calculate this on the fly to avoid cache
-// timing attacks.
-static const uint32_t RCONS[11] = {
-  0x01000000, 0x02000000, 0x04000000, 0x08000000,
-  0x10000000, 0x20000000, 0x40000000, 0x80000000,
-  0x1b000000, 0x36000000, 0x6c000000,
-};
-
-// rotate left, 32-bit
-#define ROTL32(a, s) (((a) << (s)) | ((a) >> (32 - (s))))
-
-static inline uint32_t aes128_rot_sub(const uint32_t a, const uint32_t i) {
-  // rotate left by 8 bits
-  const uint32_t b = ROTL32(a, 8);
-
-  return RCONS[(i - 1) >> 2] ^ (
-    (E_SBOX[(b >>  0) & 0xff]) |
-    (E_SBOX[(b >>  8) & 0xff] <<  8) |
-    (E_SBOX[(b >> 16) & 0xff] << 16) |
-    (E_SBOX[(b >> 24) & 0xff] << 24)
-  );
-}
-
-/**
  * Decryption S-Box.
  */
 static const uint8_t D_SBOX[256] = {
@@ -236,6 +88,160 @@ static const uint8_t D_SBOX[256] = {
   0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d,
 };
 
+// round constants (used in aes128_rot_sub_u32())
+//
+// FIXME: we might want to  calculate this on the fly to avoid cache
+// timing attacks.
+static const uint32_t RCONS[11] = {
+  0x01000000, 0x02000000, 0x04000000, 0x08000000,
+  0x10000000, 0x20000000, 0x40000000, 0x80000000,
+  0x1b000000, 0x36000000, 0x6c000000,
+};
+
+/**
+ * Multiply unsigned 8-bit integer by two in GF8.
+ */
+static inline uint8_t xtime(const uint8_t a) {
+  return (a << 1) ^ (((a >> 7) & 1) * 0x1b);
+}
+
+/**
+ * Multiply two 8-bit values in GF8.
+ *
+ * Parameters:
+ * - a: Unsigned 8-bit integer.
+ * - b: Unsigned 8-bit integer.
+ */
+static inline uint8_t gmul(const uint8_t a, const uint8_t b) {
+  return (
+    (((b     ) & 1) * a) ^
+    (((b >> 1) & 1) * xtime(a)) ^
+    (((b >> 2) & 1) * xtime(xtime(a))) ^
+    (((b >> 3) & 1) * xtime(xtime(xtime(a))))
+  );
+}
+
+/**
+ * Implementation of SubBytes and ShiftRows transformations used in
+ * AES encryption rounds from sections 5.1.1 and 5.1.2 of FIPS-197.
+ *
+ * Parameters:
+ * - dst: Destination 4x4 matrix of unsigned 8-bit integers.
+ * - src: Source 4x4 matrix of unsigned 8-bit integers.
+ *
+ * Source:
+ * - https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf
+ */
+static inline void pt_aes_enc_sub_and_shift(
+  uint8_t dst[static restrict 16],
+  const uint8_t src[static restrict 16]
+) {
+  uint8_t tmp[16] = {
+    E_SBOX[src[ 0]], E_SBOX[src[ 5]], E_SBOX[src[10]], E_SBOX[src[15]],
+    E_SBOX[src[ 4]], E_SBOX[src[ 9]], E_SBOX[src[14]], E_SBOX[src[ 3]],
+    E_SBOX[src[ 8]], E_SBOX[src[13]], E_SBOX[src[ 2]], E_SBOX[src[ 7]],
+    E_SBOX[src[12]], E_SBOX[src[ 1]], E_SBOX[src[ 6]], E_SBOX[src[11]],
+  };
+
+  COPY(dst, tmp, 16);
+}
+
+/**
+ * Implement AES MixColumn transformation from FIPS-197.
+ *
+ * Parameters:
+ * - dst: Destination array of 4 unsigned 8-bit integers.
+ * - src: Source array of 4 unsigned 8-bit integers.
+ *
+ * This transformation represented in matrix form, looks like this:
+ *
+ *   [ b_0 ]   [ 2 3 1 1 ] [ a_0 ]
+ *   [ b_1 ] = [ 1 2 3 1 ] [ a_1 ]
+ *   [ b_2 ]   [ 1 1 2 3 ] [ a_2 ]
+ *   [ b_3 ]   [ 3 1 1 2 ] [ a_3 ]
+ *
+ * Where:
+ * - Addition is done with XOR, like so:
+ *
+ *   = a + b
+ *   = a ^ b
+ *
+ * - Multiplication by 2 is a shift, XORed against 0x1b on overflow,
+ *   like so:
+ *
+ *     = 2 * x
+ *     = (x << 1) ^ ((x & 0x80) ? 0x1b : 0x00)
+ *
+ * - Multiplication by 3 is done as a multiply by two and an addition,
+ *   like so:
+ *
+ *     = 3 * x
+ *     = (2 + 1) * x                                // equivalent
+ *     = (2 * x) + (1 * x)                          // distribute
+ *     = (2 * x) + x                                // identity
+ *     = (x << 1) ^ ((x & 0x80) ? 0x1b : 0x00) ^ x  // convert
+ *
+ * Sources:
+ * - https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf
+ * - https://en.wikipedia.org/wiki/Rijndael_MixColumns
+ *
+ */
+static inline void pt_aes_mix_col(
+  uint8_t dst[static restrict 4],
+  const uint8_t src[static restrict 4]
+) {
+  const uint8_t a = src[0],
+                b = src[1],
+                c = src[2],
+                d = src[3];
+
+  const uint8_t tmp[4] = {
+    // MixColumn r0: 2 3 1 1
+    gmul(a, 2) ^ gmul(b, 3) ^ c ^ d,
+
+    // MixColumn r1: 1 2 3 1
+    a ^ gmul(b, 2) ^ gmul(c, 3) ^ d,
+
+    // MixColumn r2: 1 1 2 3
+    a ^ b ^ gmul(c, 2) ^ gmul(d, 3),
+
+    // MixColumn r3: 3 1 1 2
+    gmul(a, 3) ^ b ^ c ^ gmul(d, 2),
+  };
+
+  // copy to output
+  COPY(dst, tmp, sizeof(tmp));
+}
+
+#ifdef PT_AES_TEST
+void pt_aes_test_mix_col(
+  uint8_t dst[static restrict 4],
+  const uint8_t src[static restrict 4]
+) {
+  pt_aes_mix_col(dst, src);
+}
+#endif /* PT_AES_TEST */
+
+/**
+ * Implement AES Mix transformation from FIPS-197.
+ *
+ * Parameters:
+ * - dst: Destination 4x4 matrix of unsigned 8-bit integers.
+ * - src: Source 4x4 matrix of unsigned 8-bit integers.
+ */
+static inline void pt_aes_mix(
+  uint8_t dst[static restrict 16],
+  const uint8_t src[static restrict 16]
+) {
+  uint8_t tmp[16];
+
+  for (int i = 0; i < 4; i++) {
+    pt_aes_mix_col(tmp + (4 * i), src + (4 * i));
+  }
+
+  COPY(dst, tmp, 16);
+}
+
 static inline void pt_aes_dec_shift_and_sub(
   uint8_t dst[static restrict 16],
   const uint8_t src[static restrict 16]
@@ -262,7 +268,7 @@ static inline void pt_aes_dec_shift_and_sub(
  *   [ b_3 ]   [ b d 9 e ] [ a_3 ]
  *
  */
-static void pt_aes_inv_mix_col(
+static inline void pt_aes_inv_mix_col(
   uint8_t dst[static restrict 4],
   const uint8_t src[static restrict 4]
 ) {
@@ -298,7 +304,7 @@ void pt_aes_test_inv_mix_col(
 }
 #endif /* PT_AES_TEST */
 
-static void pt_aes_inv_mix(
+static inline void pt_aes_inv_mix(
   uint8_t dst[static restrict 16],
   const uint8_t src[static restrict 16]
 ) {
@@ -309,6 +315,24 @@ static void pt_aes_inv_mix(
   }
 
   COPY(dst, tmp, 16);
+}
+
+/**
+ * Rotation and substitution used in aes128 key expansion.
+ */
+static inline uint32_t aes128_rot_sub(
+  const uint32_t a,
+  const uint32_t i
+) {
+  // rotate left by 8 bits
+  const uint32_t b = ROTL32(a, 8);
+
+  return RCONS[(i - 1) >> 2] ^ (
+    (E_SBOX[(b >>  0) & 0xff]) |
+    (E_SBOX[(b >>  8) & 0xff] <<  8) |
+    (E_SBOX[(b >> 16) & 0xff] << 16) |
+    (E_SBOX[(b >> 24) & 0xff] << 24)
+  );
 }
 
 /**
@@ -348,7 +372,7 @@ void pt_aes128_keyex(
 /**
  * Implementation of AddRoundKey transformation from FIPS-197.
  */
-static void pt_aes128_add_round_key(
+static inline void pt_aes128_add_round_key(
   uint8_t dst[static restrict 16],
   const uint8_t src[static restrict 16],
   const uint32_t key_data[static restrict 4]
