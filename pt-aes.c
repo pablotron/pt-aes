@@ -88,14 +88,17 @@ static const uint8_t D_SBOX[256] = {
   0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d,
 };
 
-// round constants (used in aes128_rot_sub_u32())
+// round constants (used in aesXXX_rot_sub_u32())
 //
 // FIXME: we might want to  calculate this on the fly to avoid cache
 // timing attacks.
-static const uint32_t RCONS[11] = {
+static const uint32_t RCONS[22] = {
   0x01000000, 0x02000000, 0x04000000, 0x08000000,
   0x10000000, 0x20000000, 0x40000000, 0x80000000,
-  0x1b000000, 0x36000000, 0x6c000000,
+  0x1b000000, 0x36000000, 0x6c000000, 0xd8000000,
+  0xab000000, 0x4d000000, 0x9a000000, 0x2f000000,
+  0x5e000000, 0xbc000000, 0x63000000, 0xc6000000,
+  0x97000000, 0x35000000,
 };
 
 /**
