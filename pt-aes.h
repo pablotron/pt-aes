@@ -6,11 +6,6 @@ void pt_aes128_keyex(
   const uint8_t src[static restrict 16]
 );
 
-void pt_aes_mix_col(
-  uint8_t dst[static restrict 4],
-  const uint8_t src[static restrict 4]
-);
-
 void pt_aes128_enc(
   uint8_t dst[static restrict 16],
   const uint8_t src[static restrict 16],

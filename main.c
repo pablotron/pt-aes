@@ -3,9 +3,13 @@
 #include <string.h> // memcmp()
 #include <stdio.h> // printf()
 #include "pt-aes.h"
+#ifdef PT_AES_TEST
+#include "pt-aes-test.h"
+#endif /* PT_AES_TEST */
 
 #define LEN(a) (sizeof(a) / sizeof(a[0]))
 
+#ifdef PT_AES_TEST
 // test vectors for pt_aes_mix_col()
 // src: https://en.wikipedia.org/wiki/Rijndael_MixColumns#Test_vectors_for_MixColumn()
 static const struct {
@@ -43,18 +47,76 @@ static void fail_aes_mix_col_test(
   printf("  exp = %02x %02x %02x %02x\n", exp[0], exp[1], exp[2], exp[3]);
   printf("  got = %02x %02x %02x %02x\n", got[0], got[1], got[2], got[3]);
 }
+#endif /* PT_AES_TEST */
 
 static void test_aes_mix_col(void) {
+#ifdef PT_AES_TEST
   for (size_t i = 0; i < LEN(AES_MIX_COL_TESTS); i++) {
     // mix column
     uint8_t got[4];
-    pt_aes_mix_col(got, AES_MIX_COL_TESTS[i].src);
+    pt_aes_test_mix_col(got, AES_MIX_COL_TESTS[i].src);
 
     // check result
     if (memcmp(got, AES_MIX_COL_TESTS[i].dst, 4)) {
       fail_aes_mix_col_test(i, got);
     }
   }
+#endif /* PT_AES_TEST */
+}
+
+#ifdef PT_AES_TEST
+// test vectors for pt_aes_inv_mix_col()
+// src: https://en.wikipedia.org/wiki/Rijndael_MixColumns#Test_vectors_for_MixColumn()
+static const struct {
+  uint8_t src[4];
+  uint8_t dst[4];
+} AES_INV_MIX_COL_TESTS[] = {{
+  .src = { 0x8e, 0x4d, 0xa1, 0xbc },
+  .dst = { 0xdb, 0x13, 0x53, 0x45 },
+}, {
+  .src = { 0x9f, 0xdc, 0x58, 0x9d },
+  .dst = { 0xf2, 0x0a, 0x22, 0x5c },
+}, {
+  .src = { 0x01, 0x01, 0x01, 0x01 },
+  .dst = { 0x01, 0x01, 0x01, 0x01 },
+}, {
+  .src = { 0xc6, 0xc6, 0xc6, 0xc6 },
+  .dst = { 0xc6, 0xc6, 0xc6, 0xc6 },
+}, {
+  .src = { 0xd5, 0xd5, 0xd7, 0xd6 },
+  .dst = { 0xd4, 0xd4, 0xd4, 0xd5 },
+}, {
+  .src = { 0x4d, 0x7e, 0xbd, 0xf8 },
+  .dst = { 0x2d, 0x26, 0x31, 0x4c },
+}};
+
+static void fail_aes_inv_mix_col_test(
+  const size_t num,
+  const uint8_t got[4]
+) {
+  const uint8_t *src = AES_INV_MIX_COL_TESTS[num].src;
+  const uint8_t *exp = AES_INV_MIX_COL_TESTS[num].dst;
+
+  printf("FAIL: AES_INV_MIX_COL_TESTS[%zu]:\n", num);
+  printf("  src = %02x %02x %02x %02x\n", src[0], src[1], src[2], src[3]);
+  printf("  exp = %02x %02x %02x %02x\n", exp[0], exp[1], exp[2], exp[3]);
+  printf("  got = %02x %02x %02x %02x\n", got[0], got[1], got[2], got[3]);
+}
+#endif /* PT_AES_TEST */
+
+static void test_aes_inv_mix_col(void) {
+#ifdef PT_AES_TEST
+  for (size_t i = 0; i < LEN(AES_INV_MIX_COL_TESTS); i++) {
+    // mix column
+    uint8_t got[4];
+    pt_aes_test_inv_mix_col(got, AES_INV_MIX_COL_TESTS[i].src);
+
+    // check result
+    if (memcmp(got, AES_INV_MIX_COL_TESTS[i].dst, 4)) {
+      fail_aes_inv_mix_col_test(i, got);
+    }
+  }
+#endif /* PT_AES_TEST */
 }
 
 // src: NIST FIPS-197, A.1 (page 27)
@@ -279,6 +341,7 @@ static void test_aes128_dec(void) {
 
 int main(void) {
   test_aes_mix_col();
+  test_aes_inv_mix_col();
   test_aes128_keyex();
   test_aes128_enc();
   test_aes128_dec();

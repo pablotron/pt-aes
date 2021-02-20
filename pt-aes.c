@@ -29,6 +29,25 @@
 } while (0)
 
 /**
+ * Multiply by two in GF8.
+ */
+static uint8_t xtime(const uint8_t a) {
+  return (a << 1) ^ (((a >> 7) & 1) * 0x1b);
+}
+
+/**
+ * Multiply two 8-bit values in GF8.
+ */
+static uint8_t gmul(const uint8_t a, const uint8_t b) {
+  return (
+    (((b     ) & 1) * a) ^
+    (((b >> 1) & 1) * xtime(a)) ^
+    (((b >> 2) & 1) * xtime(xtime(a))) ^
+    (((b >> 3) & 1) * xtime(xtime(xtime(a))))
+  );
+}
+
+/**
  * Substitution box (S-Box) used for SubBytes transformation from
  * FIPS-197, 5.1.1.
  */
@@ -125,39 +144,41 @@ static void pt_aes_enc_sub_and_shift(
  * - https://en.wikipedia.org/wiki/Rijndael_MixColumns
  *
  */
-void pt_aes_mix_col(
+static void pt_aes_mix_col(
   uint8_t dst[static restrict 4],
   const uint8_t src[static restrict 4]
 ) {
+  const uint8_t a = src[0],
+                b = src[1],
+                c = src[2],
+                d = src[3];
+
   const uint8_t tmp[4] = {
     // MixColumn r0: 2 3 1 1
-    (src[0] << 1) ^ ((src[0] & 0x80) ? 0x1b : 0x00) ^
-    (src[1] << 1) ^ ((src[1] & 0x80) ? 0x1b : 0x00) ^ src[1] ^
-    src[2] ^
-    src[3],
+    gmul(a, 2) ^ gmul(b, 3) ^ c ^ d,
 
     // MixColumn r1: 1 2 3 1
-    src[0] ^
-    (src[1] << 1) ^ ((src[1] & 0x80) ? 0x1b : 0x00) ^
-    (src[2] << 1) ^ ((src[2] & 0x80) ? 0x1b : 0x00) ^ src[2] ^
-    src[3],
+    a ^ gmul(b, 2) ^ gmul(c, 3) ^ d,
 
     // MixColumn r2: 1 1 2 3
-    src[0] ^
-    src[1] ^
-    (src[2] << 1) ^ ((src[2] & 0x80) ? 0x1b : 0x00) ^
-    (src[3] << 1) ^ ((src[3] & 0x80) ? 0x1b : 0x00) ^ src[3],
+    a ^ b ^ gmul(c, 2) ^ gmul(d, 3),
 
     // MixColumn r3: 3 1 1 2
-    (src[0] << 1) ^ ((src[0] & 0x80) ? 0x1b : 0x00) ^ src[0] ^
-    src[1] ^
-    src[2] ^
-    (src[3] << 1) ^ ((src[3] & 0x80) ? 0x1b : 0x00),
+    gmul(a, 3) ^ b ^ c ^ gmul(d, 2),
   };
 
   // copy to output
   COPY(dst, tmp, sizeof(tmp));
 }
+
+#ifdef PT_AES_TEST
+void pt_aes_test_mix_col(
+  uint8_t dst[static restrict 4],
+  const uint8_t src[static restrict 4]
+) {
+  pt_aes_mix_col(dst, src);
+}
+#endif /* PT_AES_TEST */
 
 static void pt_aes_mix(
   uint8_t dst[static restrict 16],
@@ -242,25 +263,6 @@ static void pt_aes128_add_round_key(
   uint8_t tmp[16];
   COPY(tmp, src, 16);
 
-/* 
- *   tmp[ 0] ^= (key_data[0] >> 24) & 0xff;
- *   tmp[ 1] ^= (key_data[0] >> 16) & 0xff;
- *   tmp[ 2] ^= (key_data[0] >>  8) & 0xff;
- *   tmp[ 3] ^= (key_data[0] >>  0) & 0xff;
- *   tmp[ 4] ^= (key_data[1] >> 24) & 0xff;
- *   tmp[ 5] ^= (key_data[1] >> 16) & 0xff;
- *   tmp[ 6] ^= (key_data[1] >>  8) & 0xff;
- *   tmp[ 7] ^= (key_data[1] >>  0) & 0xff;
- *   tmp[ 8] ^= (key_data[2] >> 24) & 0xff;
- *   tmp[ 9] ^= (key_data[2] >> 16) & 0xff;
- *   tmp[10] ^= (key_data[2] >>  8) & 0xff;
- *   tmp[11] ^= (key_data[2] >>  0) & 0xff;
- *   tmp[12] ^= (key_data[3] >> 24) & 0xff;
- *   tmp[13] ^= (key_data[3] >> 16) & 0xff;
- *   tmp[14] ^= (key_data[3] >>  8) & 0xff;
- *   tmp[15] ^= (key_data[3] >>  0) & 0xff;
- */ 
-
   // mix in key data
   for (int i = 0; i < 16; i++) {
     tmp[i] ^= (key_data[i >> 2] >> (24 - ((i & 0x3) << 3))) & 0xff;
@@ -341,12 +343,78 @@ static void pt_aes_dec_shift_and_sub(
   uint8_t dst[static restrict 16],
   const uint8_t src[static restrict 16]
 ) {
+  (void) D_SBOX;
   uint8_t tmp[16] = {
-    D_SBOX[src[ 0]], D_SBOX[src[ 5]], D_SBOX[src[10]], D_SBOX[src[15]],
-    D_SBOX[src[ 4]], D_SBOX[src[ 9]], D_SBOX[src[14]], D_SBOX[src[ 3]],
-    D_SBOX[src[ 8]], D_SBOX[src[13]], D_SBOX[src[ 2]], D_SBOX[src[ 7]],
-    D_SBOX[src[12]], D_SBOX[src[ 1]], D_SBOX[src[ 6]], D_SBOX[src[11]],
+    D_SBOX[src[ 0]], D_SBOX[src[13]], D_SBOX[src[10]], D_SBOX[src[ 7]],
+    D_SBOX[src[ 4]], D_SBOX[src[ 1]], D_SBOX[src[14]], D_SBOX[src[11]],
+    D_SBOX[src[ 8]], D_SBOX[src[ 5]], D_SBOX[src[ 2]], D_SBOX[src[15]],
+    D_SBOX[src[12]], D_SBOX[src[ 9]], D_SBOX[src[ 6]], D_SBOX[src[ 3]],
   };
+
+  COPY(dst, tmp, 16);
+}
+
+/**
+ * Implement AES InvMixColumn transformation from FIPS-197, section
+ * 5.3.3.
+ *
+ * In other words, this transformation (represented in matrix form):
+ *
+ *   [ b_0 ]   [ e b d 9 ] [ a_0 ]
+ *   [ b_1 ] - [ 9 e b d ] [ a_1 ]
+ *   [ b_2 ] - [ d 9 e b ] [ a_2 ]
+ *   [ b_3 ]   [ b d 9 e ] [ a_3 ]
+ *
+ */
+static void pt_aes_inv_mix_col(
+  uint8_t dst[static restrict 4],
+  const uint8_t src[static restrict 4]
+) {
+  const uint8_t a = src[0],
+                b = src[1],
+                c = src[2],
+                d = src[3];
+
+  // e b d 9
+  // 9 e b d
+  // d 9 e b
+  // b d 9 e
+  const uint8_t tmp[4] = {
+    // InvMixColumn r0: e b d 9
+    gmul(a, 0xe) ^ gmul(b, 0xb) ^ gmul(c, 0xd) ^ gmul(d, 0x9),
+
+    // InvMixColumn r1: 9 e b d
+    gmul(a, 0x9) ^ gmul(b, 0xe) ^ gmul(c, 0xb) ^ gmul(d, 0xd),
+
+    // InvMixColumn r2: d 9 e b
+    gmul(a, 0xd) ^ gmul(b, 0x9) ^ gmul(c, 0xe) ^ gmul(d, 0xb),
+
+    // InvMixColumn r3: b d 9 e
+    gmul(a, 0xb) ^ gmul(b, 0xd) ^ gmul(c, 0x9) ^ gmul(d, 0xe),
+  };
+
+  // copy to output
+  COPY(dst, tmp, sizeof(tmp));
+}
+
+#ifdef PT_AES_TEST
+void pt_aes_test_inv_mix_col(
+  uint8_t dst[static restrict 4],
+  const uint8_t src[static restrict 4]
+) {
+  pt_aes_inv_mix_col(dst, src);
+}
+#endif /* PT_AES_TEST */
+
+static void pt_aes_inv_mix(
+  uint8_t dst[static restrict 16],
+  const uint8_t src[static restrict 16]
+) {
+  uint8_t tmp[16];
+
+  for (int i = 0; i < 4; i++) {
+    pt_aes_inv_mix_col(tmp + (4 * i), src + (4 * i));
+  }
 
   COPY(dst, tmp, 16);
 }
@@ -359,19 +427,17 @@ void pt_aes128_dec(
   uint8_t a[16], b[16];
 
   // add initial round key
-  pt_aes128_add_round_key(a, src, key_data);
+  pt_aes128_add_round_key(a, src, key_data + 40);
 
+  // first 9 rounds
+  for (int i = 0; i < 9; i++) {
+    pt_aes_dec_shift_and_sub(b, a);
+    pt_aes128_add_round_key(a, b, key_data + 36 - 4 * i);
+    pt_aes_inv_mix(b, a);
+    COPY(a, b, 16);
+  }
+
+  // final round, copy to output
   pt_aes_dec_shift_and_sub(b, a);
-  COPY(dst, b, 16);
-
-/* 
- *   // first 9 rounds
- *   for (int i = 0; i < 9; i++) {
- *     pt_aes_dec_shift_and_sub(b, a);
- *     pt_aes_mix(a, b);
- *     pt_aes128_add_round_key(b, a, key_data + 4 * (i + 1));
- *     COPY(a, b, 16);
- *   }
- */ 
+  pt_aes128_add_round_key(dst, b, key_data);
 }
-
