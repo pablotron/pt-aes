@@ -457,6 +457,82 @@ static void test_aes128_cbc_dec(void) {
   }
 }
 
+// src: NIST FIPS-197, A.1 (page 27)
+// https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf
+static const struct {
+  const uint8_t src[24];
+  const uint32_t dst[52];
+} AES192_KEYEX_TESTS[] = {{
+  .src = {
+    0x8e, 0x73, 0xb0, 0xf7, 0xda, 0x0e, 0x64, 0x52,
+    0xc8, 0x10, 0xf3, 0x2b, 0x80, 0x90, 0x79, 0xe5,
+    0x62, 0xf8, 0xea, 0xd2, 0x52, 0x2c, 0x6b, 0x7b,
+  },
+
+  .dst = {
+    0x8e73b0f7, 0xda0e6452, 0xc810f32b, 0x809079e5,
+    0x62f8ead2, 0x522c6b7b, 0xfe0c91f7, 0x2402f5a5,
+    0xec12068e, 0x6c827f6b, 0x0e7a95b9, 0x5c56fec2,
+    0x4db7b4bd, 0x69b54118, 0x85a74796, 0xe92538fd,
+    0xe75fad44, 0xbb095386, 0x485af057, 0x21efb14f,
+    0xa448f6d9, 0x4d6dce24, 0xaa326360, 0x113b30e6,
+    0xa25e7ed5, 0x83b1cf9a, 0x27f93943, 0x6a94f767,
+    0xc0a69407, 0xd19da4e1, 0xec1786eb, 0x6fa64971,
+    0x485f7032, 0x22cb8755, 0xe26d1352, 0x33f0b7b3,
+    0x40beeb28, 0x2f18a259, 0x6747d26b, 0x458c553e,
+    0xa7e1466c, 0x9411f1df, 0x821f750a, 0xad07d753,
+    0xca400538, 0x8fcc5006, 0x282d166a, 0xbc3ce7b5,
+    0xe98ba06f, 0x448c773c, 0x8ecc7204, 0x01002202,
+  },
+}};
+
+static void print_aes192_keyex_key(
+  const char * const name,
+  const uint8_t src[static 24]
+) {
+  printf("  %s =\n    ", name);
+  for (size_t i = 0; i < 24; i++) {
+    printf("%02x%s", src[i], ((i % 4) == 3) ? " " : "");
+  }
+  printf("\n");
+}
+
+static void print_aes192_keyex_result(
+  const char * const name,
+  const uint32_t vals[static 52]
+) {
+  printf("  %s =\n", name);
+  for (size_t i = 0; i < 13; i++) {
+    printf("    %08x %08x %08x %08x\n", vals[4 * i + 0], vals[4 * i + 1], vals[4 * i + 2], vals[4 * i + 3]);
+  }
+}
+
+static void fail_aes192_keyex_test(
+  const size_t num,
+  const uint32_t got[52]
+) {
+  const uint8_t *src = AES192_KEYEX_TESTS[num].src;
+  const uint32_t *exp = AES192_KEYEX_TESTS[num].dst;
+
+  printf("FAIL: AES192_KEYEX_TESTS[%zu]:\n", num);
+  print_aes192_keyex_key("src", src);
+  print_aes192_keyex_result("exp", exp);
+  print_aes192_keyex_result("got", got);
+}
+
+static void test_aes192_keyex(void) {
+  for (size_t i = 0; i < LEN(AES192_KEYEX_TESTS); i++) {
+    // expand key
+    uint32_t got[52];
+    pt_aes192_keyex(got, AES192_KEYEX_TESTS[i].src);
+
+    // check result
+    if (memcmp(got, AES192_KEYEX_TESTS[i].dst, 44 * sizeof(uint32_t))) {
+      fail_aes192_keyex_test(i, got);
+    }
+  }
+}
+
 int main(void) {
   test_aes_mix_col();
   test_aes_inv_mix_col();
@@ -465,4 +541,5 @@ int main(void) {
   test_aes128_dec();
   test_aes128_cbc_enc();
   test_aes128_cbc_dec();
+  test_aes192_keyex();
 }

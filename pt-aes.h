@@ -41,4 +41,9 @@ void pt_aes128_cbc_dec(
   const uint8_t src[static restrict 16]
 );
 
+void pt_aes192_keyex(
+  uint32_t dst[static restrict 52],
+  const uint8_t src[static restrict 24]
+);
+
 #endif /* PT_AES_H */
