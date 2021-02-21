@@ -533,6 +533,113 @@ static void test_aes192_keyex(void) {
   }
 }
 
+static const struct {
+  const uint8_t src[16];
+  const uint8_t key[24];
+  const uint8_t dst[16];
+} AES192_ENC_TESTS[] = {{
+  // src: FIPS-197, Appendix C
+  .src = {
+    0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+    0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+  },
+
+  .key = {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+  },
+
+  .dst = {
+    0xdd, 0xa9, 0x7c, 0xa4, 0x86, 0x4c, 0xdf, 0xe0,
+    0x6e, 0xaf, 0x70, 0xa0, 0xec, 0x0d, 0x71, 0x91,
+  },
+}};
+
+static void fail_aes192_enc_test(
+  const size_t num,
+  const uint8_t got[static 16]
+) {
+  const uint8_t *exp = AES192_ENC_TESTS[num].dst;
+
+  printf("FAIL: AES192_ENC_TESTS[%zu]:\n", num);
+  print_block("src", AES192_ENC_TESTS[num].src);
+  print_block("key", AES192_ENC_TESTS[num].key);
+  print_block("exp", exp);
+  print_block("got", got);
+}
+
+static void test_aes192_enc(void) {
+  for (size_t i = 0; i < LEN(AES192_ENC_TESTS); i++) {
+    // expand key
+    uint32_t key_data[44];
+    pt_aes192_keyex(key_data, AES192_ENC_TESTS[i].key);
+
+    // encrypt block
+    uint8_t got[16];
+    pt_aes192_enc(got, AES192_ENC_TESTS[i].src, key_data);
+
+    // check result
+    if (memcmp(got, AES192_ENC_TESTS[i].dst, 16)) {
+      fail_aes192_enc_test(i, got);
+    }
+  }
+}
+
+static const struct {
+  const uint8_t src[16];
+  const uint8_t key[24];
+  const uint8_t dst[16];
+} AES192_DEC_TESTS[] = {{
+  // src: FIPS-197, Appendix C
+  .src = {
+    0xdd, 0xa9, 0x7c, 0xa4, 0x86, 0x4c, 0xdf, 0xe0,
+    0x6e, 0xaf, 0x70, 0xa0, 0xec, 0x0d, 0x71, 0x91,
+  },
+
+  .key = {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+  },
+
+  .dst = {
+    0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+    0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+  },
+
+}};
+
+static void fail_aes192_dec_test(
+  const size_t num,
+  const uint8_t got[static 16]
+) {
+  const uint8_t *exp = AES192_DEC_TESTS[num].dst;
+
+  printf("FAIL: AES192_DEC_TESTS[%zu]:\n", num);
+  print_block("src", AES192_DEC_TESTS[num].src);
+  print_block("key", AES192_DEC_TESTS[num].key);
+  print_block("exp", exp);
+  print_block("got", got);
+}
+
+static void test_aes192_dec(void) {
+  for (size_t i = 0; i < LEN(AES192_DEC_TESTS); i++) {
+    // expand key
+    uint32_t key_data[52];
+    pt_aes192_keyex(key_data, AES192_DEC_TESTS[i].key);
+
+    // encrypt block
+    uint8_t got[16];
+    pt_aes192_dec(got, AES192_DEC_TESTS[i].src, key_data);
+
+    // check result
+    if (memcmp(got, AES192_DEC_TESTS[i].dst, 16)) {
+      fail_aes192_dec_test(i, got);
+    }
+  }
+}
+
 int main(void) {
   test_aes_mix_col();
   test_aes_inv_mix_col();
@@ -542,4 +649,6 @@ int main(void) {
   test_aes128_cbc_enc();
   test_aes128_cbc_dec();
   test_aes192_keyex();
+  test_aes192_enc();
+  test_aes192_dec();
 }
