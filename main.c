@@ -837,6 +837,60 @@ static void test_aes256_keyex(void) {
   }
 }
 
+static const struct {
+  const uint8_t src[16];
+  const uint8_t key[32];
+  const uint8_t dst[16];
+} AES256_ENC_TESTS[] = {{
+  // src: FIPS-197, Appendix C.3
+  .src = {
+    0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+    0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+  },
+
+  .key = {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+    0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+  },
+
+  .dst = {
+    0x8e, 0xa2, 0xb7, 0xca, 0x51, 0x67, 0x45, 0xbf,
+    0xea, 0xfc, 0x49, 0x90, 0x4b, 0x49, 0x60, 0x89,
+  },
+}};
+
+static void fail_aes256_enc_test(
+  const size_t num,
+  const uint8_t got[static 16]
+) {
+  const uint8_t *exp = AES256_ENC_TESTS[num].dst;
+
+  printf("FAIL: AES256_ENC_TESTS[%zu]:\n", num);
+  print_block("src", AES256_ENC_TESTS[num].src);
+  print_block("key", AES256_ENC_TESTS[num].key);
+  print_block("exp", exp);
+  print_block("got", got);
+}
+
+static void test_aes256_enc(void) {
+  for (size_t i = 0; i < LEN(AES256_ENC_TESTS); i++) {
+    // expand key
+    uint32_t key_data[44];
+    pt_aes256_keyex(key_data, AES256_ENC_TESTS[i].key);
+
+    // encrypt block
+    uint8_t got[16];
+    pt_aes256_enc(got, AES256_ENC_TESTS[i].src, key_data);
+
+    // check result
+    if (memcmp(got, AES256_ENC_TESTS[i].dst, 16)) {
+      fail_aes256_enc_test(i, got);
+    }
+  }
+}
+
 int main(void) {
   test_aes_mix_col();
   test_aes_inv_mix_col();
@@ -851,4 +905,5 @@ int main(void) {
   test_aes192_cbc_enc();
   test_aes192_cbc_dec();
   test_aes256_keyex();
+  test_aes256_enc();
 }
