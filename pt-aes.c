@@ -913,3 +913,72 @@ void pt_aes256_dec(
   pt_aes_dec_shift_and_sub(b, a);
   pt_aes256_add_round_key(dst, b, key_data);
 }
+
+/**
+ * Initialize aes256-cbc state with given key and initialization vector
+ * (IV).
+ *
+ * Parameters:
+ * - state: State to initialize.
+ * - key: 32-byte key.
+ * - iv: 16-byte initialization vector (IV).
+ *
+ */
+void pt_aes256_cbc_init(
+  pt_aes256_cbc_t * const state,
+  const uint8_t key[static restrict 32],
+  const uint8_t iv[static restrict 16]
+) {
+  pt_aes256_keyex(state->key_data, key);
+  COPY(state->last, iv, 16);
+}
+
+/**
+ * Encrypt single block using aes256-cbc.
+ *
+ * F(plaintext_i) = plaintext_i ^ ciphertext_(i - 1)
+ * ciphertext_0 = IV
+ *
+ * Reference:
+ * https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Confidentiality_only_modes
+ */
+void pt_aes256_cbc_enc(
+  pt_aes256_cbc_t * const state,
+  uint8_t dst[static restrict 16],
+  const uint8_t src[static restrict 16]
+) {
+  uint8_t tmp[16];
+
+  // xor against last ciphertext block
+  XOR_BLOCK(tmp, state->last, src, 16);
+
+  // encrypt block
+  pt_aes256_enc(state->last, tmp, state->key_data);
+
+  // copy to output
+  COPY(dst, state->last, 16);
+}
+
+/**
+ * Decrypt a single block using aes256-cbc.
+ *
+ * Reference:
+ * https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Confidentiality_only_modes
+ */
+void pt_aes256_cbc_dec(
+  pt_aes256_cbc_t * const state,
+  uint8_t dst[static restrict 16],
+  const uint8_t src[static restrict 16]
+) {
+  uint8_t tmp[16];
+
+  // decrypt block
+  pt_aes256_dec(tmp, src, state->key_data);
+
+  // xor against last ciphertext block
+  XOR_BLOCK(tmp, tmp, state->last, 16);
+
+  // copy to state and output
+  COPY(state->last, tmp, 16);
+  COPY(dst, tmp, 16);
+}
