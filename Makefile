@@ -12,7 +12,7 @@ $(APP): $(OBJS)
 	$(CC) -o $(APP) $(CFLAGS) $(OBJS)
 
 clean:
-	$(RM) -f $(OBJS)
+	$(RM) -f $(OBJS) $(APP)
 
 %.o: %.c
 	$(CC) -c $(CFLAGS) $<
