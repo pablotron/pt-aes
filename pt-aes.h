@@ -81,4 +81,21 @@ void pt_aes192_cbc_dec(
   const uint8_t src[static restrict 16]
 );
 
+void pt_aes256_keyex(
+  uint32_t dst[static restrict 60],
+  const uint8_t src[static restrict 32]
+);
+
+void pt_aes256_enc(
+  uint8_t dst[static restrict 16],
+  const uint8_t src[static restrict 16],
+  const uint32_t key_data[static restrict 60]
+);
+
+void pt_aes256_dec(
+  uint8_t dst[static restrict 16],
+  const uint8_t src[static restrict 16],
+  const uint32_t key_data[static restrict 60]
+);
+
 #endif /* PT_AES_H */
