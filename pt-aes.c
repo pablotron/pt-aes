@@ -755,6 +755,22 @@ void pt_aes192_cbc_dec(
 }
 
 /**
+ * AES-256 SubWord: Substitute each byte in a 32-bit unsigned integer
+ * with a value for the encryption substitution box.
+ *
+ * Used for AES-256 key expansion.
+ */
+static inline uint32_t aes256_sub_word(const uint32_t a) {
+  return (
+    (E_SBOX[(a >>  0) & 0xff]) |
+    (E_SBOX[(a >>  8) & 0xff] <<  8) |
+    (E_SBOX[(a >> 16) & 0xff] << 16) |
+    (E_SBOX[(a >> 24) & 0xff] << 24)
+  );
+}
+
+
+/**
  * Rotation and substitution used in AES-256 key expansion.
  */
 static inline uint32_t aes256_rot_sub(
@@ -764,12 +780,7 @@ static inline uint32_t aes256_rot_sub(
   // rotate left by 8 bits
   const uint32_t b = ROTL32(a, 8);
 
-  return (ROUND_CONSTS[(i - 1) / 8] << 24) ^ (
-    (E_SBOX[(b >>  0) & 0xff]) |
-    (E_SBOX[(b >>  8) & 0xff] <<  8) |
-    (E_SBOX[(b >> 16) & 0xff] << 16) |
-    (E_SBOX[(b >> 24) & 0xff] << 24)
-  );
+  return (ROUND_CONSTS[(i - 1) / 8] << 24) ^ aes256_sub_word(b);
 }
 
 /**
@@ -802,8 +813,9 @@ void pt_aes256_keyex(
   // expand key data
   for (int i = 8; i < 60; i++) {
     uint32_t a = tmp[i - 1],
-             b = aes256_rot_sub(tmp[i - 1], i);
-    tmp[i] = tmp[i - 8] ^ ((i % 8) ? a : b);
+             b = aes256_rot_sub(tmp[i - 1], i),
+             c = aes256_sub_word(tmp[i - 1]);
+    tmp[i] = tmp[i - 8] ^ ((i % 8) ? ((i % 4) ? a : c) : b);
   }
 
   // copy to output

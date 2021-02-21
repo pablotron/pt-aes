@@ -457,7 +457,7 @@ static void test_aes128_cbc_dec(void) {
   }
 }
 
-// src: NIST FIPS-197, A.1 (page 27)
+// src: NIST FIPS-197, A.2 (page 28)
 // https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf
 static const struct {
   const uint8_t src[24];
@@ -758,6 +758,85 @@ static void test_aes192_cbc_dec(void) {
   }
 }
 
+// src: NIST FIPS-197, A.3 (page 30)
+// https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf
+static const struct {
+  const uint8_t src[32];
+  const uint32_t dst[60];
+} AES256_KEYEX_TESTS[] = {{
+  .src = {
+    0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe,
+    0x2b, 0x73, 0xae, 0xf0, 0x85, 0x7d, 0x77, 0x81,
+    0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7,
+    0x2d, 0x98, 0x10, 0xa3, 0x09, 0x14, 0xdf, 0xf4,
+  },
+
+  .dst = {
+    0x603deb10, 0x15ca71be, 0x2b73aef0, 0x857d7781,
+    0x1f352c07, 0x3b6108d7, 0x2d9810a3, 0x0914dff4,
+    0x9ba35411, 0x8e6925af, 0xa51a8b5f, 0x2067fcde,
+    0xa8b09c1a, 0x93d194cd, 0xbe49846e, 0xb75d5b9a,
+    0xd59aecb8, 0x5bf3c917, 0xfee94248, 0xde8ebe96,
+    0xb5a9328a, 0x2678a647, 0x98312229, 0x2f6c79b3,
+    0x812c81ad, 0xdadf48ba, 0x24360af2, 0xfab8b464,
+    0x98c5bfc9, 0xbebd198e, 0x268c3ba7, 0x09e04214,
+    0x68007bac, 0xb2df3316, 0x96e939e4, 0x6c518d80,
+    0xc814e204, 0x76a9fb8a, 0x5025c02d, 0x59c58239,
+    0xde136967, 0x6ccc5a71, 0xfa256395, 0x9674ee15,
+    0x5886ca5d, 0x2e2f31d7, 0x7e0af1fa, 0x27cf73c3,
+    0x749c47ab, 0x18501dda, 0xe2757e4f, 0x7401905a,
+    0xcafaaae3, 0xe4d59b34, 0x9adf6ace, 0xbd10190d,
+    0xfe4890d1, 0xe6188d0b, 0x046df344, 0x706c631e,
+  },
+}};
+
+static void print_aes256_keyex_key(
+  const char * const name,
+  const uint8_t src[static 32]
+) {
+  printf("  %s =\n    ", name);
+  for (size_t i = 0; i < 32; i++) {
+    printf("%02x%s", src[i], ((i % 4) == 3) ? " " : "");
+  }
+  printf("\n");
+}
+
+static void print_aes256_keyex_result(
+  const char * const name,
+  const uint32_t vals[static 60]
+) {
+  printf("  %s =\n", name);
+  for (size_t i = 0; i < 15; i++) {
+    printf("    %08x %08x %08x %08x\n", vals[4 * i + 0], vals[4 * i + 1], vals[4 * i + 2], vals[4 * i + 3]);
+  }
+}
+
+static void fail_aes256_keyex_test(
+  const size_t num,
+  const uint32_t got[60]
+) {
+  const uint8_t *src = AES256_KEYEX_TESTS[num].src;
+  const uint32_t *exp = AES256_KEYEX_TESTS[num].dst;
+
+  printf("FAIL: AES256_KEYEX_TESTS[%zu]:\n", num);
+  print_aes256_keyex_key("src", src);
+  print_aes256_keyex_result("exp", exp);
+  print_aes256_keyex_result("got", got);
+}
+
+static void test_aes256_keyex(void) {
+  for (size_t i = 0; i < LEN(AES256_KEYEX_TESTS); i++) {
+    // expand key
+    uint32_t got[60];
+    pt_aes256_keyex(got, AES256_KEYEX_TESTS[i].src);
+
+    // check result
+    if (memcmp(got, AES256_KEYEX_TESTS[i].dst, 60 * sizeof(uint32_t))) {
+      fail_aes256_keyex_test(i, got);
+    }
+  }
+}
+
 int main(void) {
   test_aes_mix_col();
   test_aes_inv_mix_col();
@@ -771,4 +850,5 @@ int main(void) {
   test_aes192_dec();
   test_aes192_cbc_enc();
   test_aes192_cbc_dec();
+  test_aes256_keyex();
 }
