@@ -8,12 +8,20 @@
   } \
 } while (0)
 
+// xor +num+ elements of +a+ and +b+ and store the result in +c+
+#define XOR_BLOCK(c, a, b, len) do { \
+  for (int _i = 0; _i < (len); _i++) { \
+    (c)[_i] = (a)[_i] ^ (b)[_i]; \
+  } \
+} while (0)
+
 // rotate left, 32-bit
 #define ROTL32(a, s) (((a) << (s)) | ((a) >> (32 - (s))))
 
 /**
- * Substitution box (S-Box) used for SubBytes transformation from
- * FIPS-197, 5.1.1.
+ * Encryption substitution box (S-Box) from FIPS-197, 5.1.1.
+ *
+ * Used for the SubBytes transformation during encryption.
  */
 static const uint8_t E_SBOX[256] = {
   0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5,
@@ -51,7 +59,9 @@ static const uint8_t E_SBOX[256] = {
 };
 
 /**
- * Decryption S-Box.
+ * Decryption substitution box (S-Box) from FIPS-197, 5.3.2.
+ *
+ * Used for InvSubBytes transformation during decryption.
  */
 static const uint8_t D_SBOX[256] = {
   0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38,
@@ -88,10 +98,14 @@ static const uint8_t D_SBOX[256] = {
   0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d,
 };
 
-// round constants (used in aesXXX_rot_sub_u32())
-//
-// FIXME: we might want to  calculate this on the fly to avoid cache
-// timing attacks.
+/**
+ * Round constants.
+ *
+ * Mixed in every N rounds via aesXXX_rot_sub_u32().
+ *
+ * Note: We might want to calculate this on the fly to avoid cache
+ * timing attacks.
+ */
 static const uint8_t ROUND_CONSTS[22] = {
   0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80,
   0x1b, 0x36, 0x6c, 0xd8, 0xab, 0x4d, 0x9a, 0x2f,
@@ -318,7 +332,7 @@ static inline void pt_aes_inv_mix(
 }
 
 /**
- * Rotation and substitution used in aes128 key expansion.
+ * Rotation and substitution used in AES-128 key expansion.
  */
 static inline uint32_t aes128_rot_sub(
   const uint32_t a,
@@ -327,7 +341,7 @@ static inline uint32_t aes128_rot_sub(
   // rotate left by 8 bits
   const uint32_t b = ROTL32(a, 8);
 
-  return (ROUND_CONSTS[(i - 1) >> 2] << 24) ^ (
+  return (ROUND_CONSTS[(i - 1) / 4] << 24) ^ (
     (E_SBOX[(b >>  0) & 0xff]) |
     (E_SBOX[(b >>  8) & 0xff] <<  8) |
     (E_SBOX[(b >> 16) & 0xff] << 16) |
@@ -490,9 +504,7 @@ void pt_aes128_cbc_enc(
   uint8_t tmp[16];
 
   // xor against last ciphertext block
-  for (int i = 0; i < 16; i++) {
-    tmp[i] = state->last[i] ^ src[i];
-  }
+  XOR_BLOCK(tmp, state->last, src, 16);
 
   // encrypt block
   pt_aes128_enc(state->last, tmp, state->key_data);
@@ -518,9 +530,7 @@ void pt_aes128_cbc_dec(
   pt_aes128_dec(tmp, src, state->key_data);
 
   // xor against last ciphertext block
-  for (int i = 0; i < 16; i++) {
-    tmp[i] ^= state->last[i];
-  }
+  XOR_BLOCK(tmp, tmp, state->last, 16);
 
   // copy to state and output
   COPY(state->last, tmp, 16);
@@ -707,9 +717,7 @@ void pt_aes192_cbc_enc(
   uint8_t tmp[16];
 
   // xor against last ciphertext block
-  for (int i = 0; i < 16; i++) {
-    tmp[i] = state->last[i] ^ src[i];
-  }
+  XOR_BLOCK(tmp, state->last, src, 16);
 
   // encrypt block
   pt_aes192_enc(state->last, tmp, state->key_data);
@@ -735,9 +743,7 @@ void pt_aes192_cbc_dec(
   pt_aes192_dec(tmp, src, state->key_data);
 
   // xor against last ciphertext block
-  for (int i = 0; i < 16; i++) {
-    tmp[i] ^= state->last[i];
-  }
+  XOR_BLOCK(tmp, tmp, state->last, 16);
 
   // copy to state and output
   COPY(state->last, tmp, 16);
