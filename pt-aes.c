@@ -534,8 +534,10 @@ void pt_aes128_cbc_dec(
   // xor against last ciphertext block
   XOR_BLOCK(tmp, tmp, state->last, 16);
 
-  // copy to state and output
-  COPY(state->last, tmp, 16);
+  // copy ciphertext to state
+  COPY(state->last, src, 16);
+
+  // copy plaintext to output
   COPY(dst, tmp, 16);
 }
 
@@ -749,8 +751,10 @@ void pt_aes192_cbc_dec(
   // xor against last ciphertext block
   XOR_BLOCK(tmp, tmp, state->last, 16);
 
-  // copy to state and output
-  COPY(state->last, tmp, 16);
+  // copy ciphertext to state
+  COPY(state->last, src, 16);
+
+  // copy plaintext to output
   COPY(dst, tmp, 16);
 }
 
@@ -978,7 +982,9 @@ void pt_aes256_cbc_dec(
   // xor against last ciphertext block
   XOR_BLOCK(tmp, tmp, state->last, 16);
 
-  // copy to state and output
-  COPY(state->last, tmp, 16);
+  // copy ciphertext to state
+  COPY(state->last, src, 16);
+
+  // copy plaintext to output
   COPY(dst, tmp, 16);
 }
