@@ -18,6 +18,9 @@
 // rotate left, 32-bit
 #define ROTL32(a, s) (((a) << (s)) | ((a) >> (32 - (s))))
 
+// extract byte from uint64_t
+#define U64_BYTE(b, s) ((uint8_t) (((b) >> (s)) & 0xff))
+
 /**
  * Encryption substitution box (S-Box) from FIPS-197, 5.1.1.
  *
@@ -539,6 +542,56 @@ void pt_aes128_cbc_dec(
 
   // copy plaintext to output
   COPY(dst, tmp, 16);
+}
+
+/**
+ * Initialize aes128-ctr state with given key and nonce.
+ *
+ * Parameters:
+ * - state: State to initialize.
+ * - key: 16-byte key.
+ * - nonce: 8-byte nonce.
+ *
+ */
+void pt_aes128_ctr_init(
+  pt_aes128_ctr_t * const state,
+  const uint8_t key[static restrict 16],
+  const uint8_t nonce[static restrict 8]
+) {
+  pt_aes128_keyex(state->key_data, key);
+  COPY(state->nonce, nonce, 8);
+  state->counter = 0;
+}
+
+/**
+ * Encrypt or decrypt single block using aes128-ctr.
+ *
+ * F(plaintext_i) = plaintext_i ^ keystream_i
+ *
+ */
+void pt_aes128_ctr_enc(
+  pt_aes128_ctr_t * const state,
+  uint8_t dst[static restrict 16],
+  const uint8_t src[static restrict 16]
+) {
+  // construct state block
+  const uint64_t c = state->counter;
+  const uint8_t tmp[16] = {
+    state->nonce[0], state->nonce[1], state->nonce[2], state->nonce[3],
+    state->nonce[4], state->nonce[5], state->nonce[6], state->nonce[7],
+    U64_BYTE(c, 0), U64_BYTE(c, 8), U64_BYTE(c, 16), U64_BYTE(c, 24),
+    U64_BYTE(c, 32), U64_BYTE(c, 40), U64_BYTE(c, 48), U64_BYTE(c, 56),
+  };
+
+  // encrypt block as keystream
+  uint8_t keystream[16];
+  pt_aes128_enc(keystream, tmp, state->key_data);
+
+  // increment counter
+  state->counter++;
+
+  // xor keystream against plantext to produce ciphertext
+  XOR_BLOCK(dst, src, keystream, 16);
 }
 
 /**
